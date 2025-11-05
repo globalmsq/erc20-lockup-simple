@@ -1,0 +1,38 @@
+services:
+  hardhat-node:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: node
+    container_name: sut-hardhat-node
+    ports:
+      - "8545:8545"
+    networks:
+      - hardhat-network
+    restart: "no"
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:8545']
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  hardhat-deploy:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: deploy
+    container_name: sut-hardhat-deploy
+    depends_on:
+      hardhat-node:
+        condition: service_healthy
+    environment:
+      - DEPLOY_NETWORK=localhost
+    networks:
+      - hardhat-network
+    restart: "no"
+    command: sh docker/scripts/deploy.sh
+
+networks:
+  hardhat-network:
+    driver: bridge
