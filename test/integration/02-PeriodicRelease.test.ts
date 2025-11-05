@@ -58,7 +58,7 @@ describe('Integration: Periodic Release', function () {
     for (let month = 1; month <= 12; month++) {
       await time.increase(MONTH);
 
-      const releasable = await simpleLockup.releasableAmount(beneficiary.address);
+      const releasable = await simpleLockup.releasableAmount();
       if (releasable > 0n) {
         await simpleLockup.connect(beneficiary).release();
         totalReleased += releasable;

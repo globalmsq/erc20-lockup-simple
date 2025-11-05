@@ -5,14 +5,15 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
  * @title SimpleLockup
- * @notice Minimal token lockup with linear vesting - one lockup per address
+ * @notice Minimal token lockup with linear vesting - one lockup per contract
  * @dev Implements linear vesting with cliff period, simplified from TokenLockup
  *
  * Key Design Decisions:
- * - One lockup per address: Simplifies state management, reduces gas costs, clear ownership
+ * - One lockup per contract: Single beneficiary per deployment, simplifies state management
  * - Immutable token: Cannot be changed after deployment for security and predictability
  * - Pull payment pattern: Beneficiaries initiate withdrawals (gas-efficient, secure)
  * - Integer division: Uses standard Solidity division for vesting calculations
@@ -41,7 +42,8 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
     }
 
     IERC20 public immutable token;
-    mapping(address => LockupInfo) public lockups;
+    LockupInfo public lockupInfo;
+    address public beneficiary;
 
     // Constants
     uint256 public constant MAX_VESTING_DURATION = 10 * 365 days; // 10 years
@@ -66,14 +68,30 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
     error NoTokensAvailable();
     error NotRevocable();
     error AlreadyRevoked();
+    error NotBeneficiary();
+    error InsufficientBalance();
+    error InsufficientAllowance();
+    error InsufficientTokensReceived(uint256 received, uint256 expected);
+    error NothingToRevoke();
 
     /**
      * @notice Constructor
      * @param _token Address of the ERC20 token to be locked
      * @dev Validates that token address contains contract code
-     * @custom:security Deployer must verify ERC20 compatibility before deployment.
-     *      Always verify token contract source code to ensure it doesn't implement
-     *      ERC-777 hooks (tokensReceived, tokensToSend) which could enable reentrancy.
+     *
+     * @custom:security Token Compatibility
+     *      This contract is designed for STANDARD ERC-20 tokens only.
+     *
+     *      INCOMPATIBLE with:
+     *      - ERC-777 tokens: reentrancy risk via tokensReceived/tokensToSend hooks
+     *      - Deflationary tokens: transfer fees cause balance mismatch (auto-detected and rejected)
+     *      - Rebasing tokens: balance changes over time (e.g., stETH, aTokens)
+     *
+     *      VALIDATION:
+     *      The contract validates actual received amount during lockup creation.
+     *      Transactions will revert if received amount < expected amount.
+     *
+     *      Deployer must verify token contract source code before deployment.
      */
     constructor(address _token) Ownable(msg.sender) {
         if (_token == address(0)) revert InvalidTokenAddress();
@@ -91,32 +109,68 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
 
     /**
      * @notice Create a new lockup for a beneficiary
-     * @param beneficiary Address that will receive the tokens
-     * @param amount Total amount of tokens to lock
-     * @param cliffDuration Duration of cliff period in seconds
-     * @param vestingDuration Total vesting duration in seconds (including cliff)
+     * @param _beneficiary Address that will receive the tokens (cannot be zero or this contract)
+     * @param amount Total amount of tokens to lock (must be > 0, no maximum enforced)
+     * @param cliffDuration Duration of cliff period in seconds (must be < vestingDuration for gradual vesting)
+     * @param vestingDuration Total vesting duration in seconds (must be > 0, max = 10 years)
      * @param revocable Whether the lockup can be revoked by owner
+     *
+     * @dev Validations (optimized for gas efficiency):
+     *      1. Lockup uniqueness: Only one lockup per contract instance
+     *      2. Amount: > 0 (no maximum, caller must ensure reasonable value)
+     *      3. Vesting duration: > 0, <= 10 years (MAX_VESTING_DURATION)
+     *      4. Cliff duration: < vesting duration (strictly less to ensure gradual vesting)
+     *      5. Beneficiary: non-zero, not this contract
+     *      6. Owner balance: >= amount
+     *      7. Owner allowance: >= amount
+     *      8. Actual received: >= amount (prevents deflationary token issues)
+     *
      * @custom:security Protected by nonReentrant modifier for defense-in-depth against
      *      ERC-777 reentrancy attacks via tokensReceived/tokensToSend hooks.
      *      Primary protection comes from Checks-Effects-Interactions pattern.
-     *      Additional protection: nonReentrant adds ~2.4K gas but prevents theoretical attacks.
+     *      Additional validation: Checks actual received amount to detect deflationary tokens.
+     *
+     * @custom:gas-considerations
+     *      - First SSTORE to beneficiary: ~20k gas
+     *      - First SSTORE to lockupInfo: ~20k gas per field
+     *      - Balance/allowance checks: ~2.6k gas each
+     *      - SafeTransferFrom: ~50k gas
+     *      - Total: ~180-200k gas
      */
     function createLockup(
-        address beneficiary,
+        address _beneficiary,
         uint256 amount,
         uint256 cliffDuration,
         uint256 vestingDuration,
         bool revocable
     ) external onlyOwner nonReentrant {
-        if (beneficiary == address(0)) revert InvalidBeneficiary();
-        if (beneficiary == address(this)) revert InvalidBeneficiary();
+        // 1. SLOAD checks (most important check first)
+        if (beneficiary != address(0)) revert LockupAlreadyExists();
+
+        // 2. Simple parameter checks
         if (amount == 0) revert InvalidAmount();
         if (vestingDuration == 0) revert InvalidDuration();
-        if (vestingDuration > MAX_VESTING_DURATION) revert InvalidDuration();
-        if (cliffDuration > vestingDuration) revert InvalidDuration();
-        if (lockups[beneficiary].totalAmount != 0) revert LockupAlreadyExists();
 
-        lockups[beneficiary] = LockupInfo({
+        // 3. Comparison operations
+        if (cliffDuration >= vestingDuration) revert InvalidDuration();
+        if (vestingDuration > MAX_VESTING_DURATION) revert InvalidDuration();
+
+        // 4. Address validations
+        if (_beneficiary == address(0)) revert InvalidBeneficiary();
+        if (_beneficiary == address(this)) revert InvalidBeneficiary();
+
+        // 5. External calls (most expensive validations)
+        uint256 ownerBalance = token.balanceOf(msg.sender);
+        uint256 allowance = token.allowance(msg.sender, address(this));
+
+        if (ownerBalance < amount) revert InsufficientBalance();
+        if (allowance < amount) revert InsufficientAllowance();
+
+        // Record balance before transfer
+        uint256 balanceBefore = token.balanceOf(address(this));
+
+        beneficiary = _beneficiary;
+        lockupInfo = LockupInfo({
             totalAmount: amount,
             releasedAmount: 0,
             startTime: block.timestamp,
@@ -129,7 +183,15 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
 
         token.safeTransferFrom(msg.sender, address(this), amount);
 
-        emit TokensLocked(beneficiary, amount, block.timestamp, cliffDuration, vestingDuration, revocable);
+        // Validate actual received amount (handles deflationary tokens)
+        uint256 balanceAfter = token.balanceOf(address(this));
+        uint256 actualReceived = balanceAfter - balanceBefore;
+
+        if (actualReceived < amount) {
+            revert InsufficientTokensReceived(actualReceived, amount);
+        }
+
+        emit TokensLocked(_beneficiary, amount, block.timestamp, cliffDuration, vestingDuration, revocable);
     }
 
     /**
@@ -140,139 +202,146 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
      * @custom:security Protected by ReentrancyGuard
      */
     function release() external nonReentrant {
-        LockupInfo storage lockup = lockups[msg.sender];
-        if (lockup.totalAmount == 0) revert NoLockupFound();
+        if (msg.sender != beneficiary) revert NotBeneficiary();
+        if (lockupInfo.totalAmount == 0) revert NoLockupFound();
 
-        uint256 releasable = _releasableAmount(msg.sender);
+        uint256 releasable = _releasableAmount();
         if (releasable == 0) revert NoTokensAvailable();
 
-        lockup.releasedAmount += releasable;
+        lockupInfo.releasedAmount += releasable;
         token.safeTransfer(msg.sender, releasable);
 
         emit TokensReleased(msg.sender, releasable);
     }
 
     /**
-     * @notice Revoke a lockup and return unvested tokens to owner
-     * @param beneficiary Address of the beneficiary whose lockup to revoke
+     * @notice Revoke the lockup and return unvested tokens to owner
      * @dev Freezes vesting at current amount by explicitly storing vestedAtRevoke.
      *      Beneficiary can still claim vested tokens up to the revoked amount.
      *      Original totalAmount and vestingDuration remain unchanged for transparency.
      *
+     * @custom:behavior Cliff Period Revocation
+     *      - If revoked BEFORE cliff ends:
+     *        * Vested amount: 0 tokens
+     *        * Beneficiary receives: NOTHING
+     *        * Owner receives: 100% of totalAmount
+     *        * This is INTENDED - no vesting occurs during cliff
+     *
+     *      - If revoked AFTER cliff but during vesting:
+     *        * Beneficiary keeps all vested tokens (intended, not vulnerability)
+     *        * Owner receives unvested tokens
+     *        * Beneficiary can still claim vested amount
+     *
+     * @custom:example Cliff Period Revoke
+     *      T=0: Lockup created (1000 tokens, 90-day cliff, 1-year vesting)
+     *      T=45 days: Owner calls revoke() (DURING cliff)
+     *      Result: Owner receives 1000 tokens, beneficiary receives 0
+     *      Status: Correct - cliff period means NO vesting yet
+     *
+     * @custom:example Post-Cliff Revoke
+     *      T=0: Lockup created (1000 tokens, 90-day cliff, 1-year vesting)
+     *      T=6 months: 500 tokens vested, owner calls revoke()
+     *      Result: Beneficiary keeps 500, owner receives 500
+     *      Status: Fair - beneficiary earned those 500 tokens
+     *
      * @custom:behavior Beneficiary Rights After Revocation
      *      - Beneficiary KEEPS all tokens vested at the time of revocation
-     *      - This is INTENDED behavior, not a security vulnerability
      *      - Revocation stops FUTURE vesting only, does not confiscate vested tokens
      *      - If beneficiary calls release() before owner calls revoke(), this is acceptable
      *      - "Front-running" revoke with release() is NOT an attack - it's fair usage
      *      - Design rationale: Revocation is for stopping future benefits, not punishing past work
      *
-     *      Example timeline:
-     *        T=0: Lockup created for 1000 tokens, 1 year vesting
-     *        T=6 months: 500 tokens vested, beneficiary has not claimed yet
-     *        T=6 months + 1 second: Owner submits revoke() transaction
-     *        T=6 months + 1 second: Beneficiary sees pending revoke, calls release()
-     *        Result: Beneficiary receives 500 tokens, owner receives 500 tokens back
-     *        This is fair and intended - beneficiary earned those 500 tokens over 6 months
-     *
      * @custom:security Only revocable lockups can be revoked. Cannot be revoked twice.
      *      Protected by ReentrancyGuard for defense-in-depth.
      */
-    function revoke(address beneficiary) external onlyOwner nonReentrant {
-        LockupInfo storage lockup = lockups[beneficiary];
-        if (lockup.totalAmount == 0) revert NoLockupFound();
-        if (lockup.revoked) revert AlreadyRevoked();
-        if (!lockup.revocable) revert NotRevocable();
+    function revoke() external onlyOwner nonReentrant {
+        if (lockupInfo.totalAmount == 0) revert NoLockupFound();
+        if (lockupInfo.revoked) revert AlreadyRevoked();
+        if (!lockupInfo.revocable) revert NotRevocable();
 
-        uint256 vested = _vestedAmount(beneficiary);
-        // Ensure vested doesn't exceed totalAmount (defensive check)
-        if (vested > lockup.totalAmount) {
-            vested = lockup.totalAmount;
+        uint256 vested = _vestedAmount();
+        // Note: mathematically vested cannot exceed totalAmount due to
+        // formula in _vestedAmount(), but keeping check for defense-in-depth
+        if (vested > lockupInfo.totalAmount) {
+            vested = lockupInfo.totalAmount;
         }
-        uint256 refund = lockup.totalAmount - vested;
+        uint256 refund = lockupInfo.totalAmount - vested;
 
-        lockup.revoked = true;
-        lockup.vestedAtRevoke = vested; // Explicitly store vested amount at revocation
+        // Prevent meaningless revocation when nothing to revoke
+        if (refund == 0) revert NothingToRevoke();
 
-        if (refund > 0) {
-            token.safeTransfer(owner(), refund);
-        }
+        lockupInfo.revoked = true;
+        lockupInfo.vestedAtRevoke = vested; // Explicitly store vested amount at revocation
+
+        token.safeTransfer(owner(), refund);
 
         emit LockupRevoked(beneficiary, refund);
     }
 
     /**
      * @notice Get the amount of tokens that can be released
-     * @param beneficiary Address to check
      * @return Amount of releasable tokens
      */
-    function releasableAmount(address beneficiary) external view returns (uint256) {
-        return _releasableAmount(beneficiary);
+    function releasableAmount() external view returns (uint256) {
+        return _releasableAmount();
     }
 
     /**
      * @notice Get the amount of vested tokens
-     * @param beneficiary Address to check
      * @return Amount of vested tokens
      */
-    function vestedAmount(address beneficiary) external view returns (uint256) {
-        return _vestedAmount(beneficiary);
+    function vestedAmount() external view returns (uint256) {
+        return _vestedAmount();
     }
 
     /**
      * @notice Get vesting progress as percentage
-     * @param beneficiary Address to check
      * @return Vesting progress (0-100)
      * @dev Returns 100 for revoked or fully vested lockups
      *      Returns 0 before cliff period or for non-existent lockups
      */
-    function getVestingProgress(address beneficiary) external view returns (uint256) {
-        LockupInfo memory lockup = lockups[beneficiary];
-
+    function getVestingProgress() external view returns (uint256) {
         // No lockup exists
-        if (lockup.totalAmount == 0) {
+        if (lockupInfo.totalAmount == 0) {
             return 0;
         }
 
         // Revoked lockups are considered 100% complete (vesting is frozen/determined)
-        if (lockup.revoked) {
+        if (lockupInfo.revoked) {
             return 100;
         }
 
         // Before cliff period
-        if (block.timestamp < lockup.startTime + lockup.cliffDuration) {
+        if (block.timestamp < lockupInfo.startTime + lockupInfo.cliffDuration) {
             return 0;
         }
 
         // After vesting completion
-        if (block.timestamp >= lockup.startTime + lockup.vestingDuration) {
+        if (block.timestamp >= lockupInfo.startTime + lockupInfo.vestingDuration) {
             return 100;
         }
 
         // During vesting period: calculate percentage
-        uint256 elapsed = block.timestamp - lockup.startTime;
-        return (elapsed * 100) / lockup.vestingDuration;
+        uint256 elapsed = block.timestamp - lockupInfo.startTime;
+        return (elapsed * 100) / lockupInfo.vestingDuration;
     }
 
     /**
      * @notice Get remaining vesting time in seconds
-     * @param beneficiary Address to check
      * @return Remaining time in seconds (0 if completed, revoked, or non-existent)
      */
-    function getRemainingVestingTime(address beneficiary) external view returns (uint256) {
-        LockupInfo memory lockup = lockups[beneficiary];
-
+    function getRemainingVestingTime() external view returns (uint256) {
         // No lockup exists
-        if (lockup.totalAmount == 0) {
+        if (lockupInfo.totalAmount == 0) {
             return 0;
         }
 
         // Revoked lockups have no remaining time (vesting is frozen)
-        if (lockup.revoked) {
+        if (lockupInfo.revoked) {
             return 0;
         }
 
-        uint256 endTime = lockup.startTime + lockup.vestingDuration;
+        uint256 endTime = lockupInfo.startTime + lockupInfo.vestingDuration;
 
         // Vesting already completed
         if (block.timestamp >= endTime) {
@@ -287,21 +356,21 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
      * @notice Internal function to calculate releasable amount
      * @dev At the end of vesting period, releases all remaining tokens to eliminate rounding dust
      */
-    function _releasableAmount(address beneficiary) private view returns (uint256) {
-        LockupInfo storage lockup = lockups[beneficiary];
-        uint256 vested = _vestedAmount(beneficiary);
+    function _releasableAmount() private view returns (uint256) {
+        uint256 vested = _vestedAmount();
 
         // If fully vested and not revoked, release all remaining tokens (eliminates rounding errors)
-        if (!lockup.revoked && block.timestamp >= lockup.startTime + lockup.vestingDuration) {
-            return lockup.totalAmount - lockup.releasedAmount;
+        if (!lockupInfo.revoked && block.timestamp >= lockupInfo.startTime + lockupInfo.vestingDuration) {
+            return lockupInfo.totalAmount - lockupInfo.releasedAmount;
         }
 
-        return vested - lockup.releasedAmount;
+        return vested - lockupInfo.releasedAmount;
     }
 
     /**
      * @notice Internal function to calculate vested amount
      * @dev Uses linear vesting formula: (totalAmount × timeFromStart) / vestingDuration
+     *      Uses Math.mulDiv to prevent integer overflow for large amounts.
      *      Integer division rounds down. Any rounding dust is released at vesting end.
      *      For revoked lockups, returns the explicitly stored vestedAtRevoke amount.
      *
@@ -309,6 +378,7 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
      *      - Rounding error: < 1 token per calculation (Solidity integer division)
      *      - NO cumulative error: Each calculation is independent, not incremental
      *      - Auto-correction: Errors self-correct in subsequent releases
+     *      - Overflow protection: Math.mulDiv prevents overflow for large amounts
      *
      *      Example (50,000,000 tokens vested over 10 years):
      *        Day 1: vested = 13,698 tokens (actual: 13,698.63)
@@ -323,30 +393,28 @@ contract SimpleLockup is Ownable, ReentrancyGuard {
      *        - Maximum loss: < 1 token (e.g., 0.000002% for 50M tokens)
      *        - This is acceptable for gas efficiency vs precision tradeoff
      */
-    function _vestedAmount(address beneficiary) private view returns (uint256) {
-        LockupInfo memory lockup = lockups[beneficiary];
-
-        if (lockup.totalAmount == 0) {
+    function _vestedAmount() private view returns (uint256) {
+        if (lockupInfo.totalAmount == 0) {
             return 0;
         }
 
         // If revoked, return the explicitly stored vested amount at revocation time
-        if (lockup.revoked) {
-            return lockup.vestedAtRevoke;
+        if (lockupInfo.revoked) {
+            return lockupInfo.vestedAtRevoke;
         }
 
-        if (block.timestamp < lockup.startTime + lockup.cliffDuration) {
+        if (block.timestamp < lockupInfo.startTime + lockupInfo.cliffDuration) {
             return 0;
         }
 
-        if (block.timestamp >= lockup.startTime + lockup.vestingDuration) {
-            return lockup.totalAmount;
+        if (block.timestamp >= lockupInfo.startTime + lockupInfo.vestingDuration) {
+            return lockupInfo.totalAmount;
         }
 
-        uint256 timeFromStart = block.timestamp - lockup.startTime;
+        uint256 timeFromStart = block.timestamp - lockupInfo.startTime;
 
-        // Calculate vested amount using simple division (any rounding dust is released at vesting end)
-        uint256 vested = (lockup.totalAmount * timeFromStart) / lockup.vestingDuration;
+        // Use Math.mulDiv to prevent overflow for large amounts
+        uint256 vested = Math.mulDiv(lockupInfo.totalAmount, timeFromStart, lockupInfo.vestingDuration);
 
         return vested;
     }

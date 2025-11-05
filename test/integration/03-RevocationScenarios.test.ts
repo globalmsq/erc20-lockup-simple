@@ -54,15 +54,15 @@ describe('Integration: Revocation Scenarios', function () {
     // Fast forward to 50% vesting
     await time.increase(VESTING_DURATION / 2);
 
-    const vestedBefore = await simpleLockup.vestedAmount(beneficiary.address);
+    const vestedBefore = await simpleLockup.vestedAmount();
     console.log(`\n📊 50% vested: ${ethers.formatEther(vestedBefore)} tokens`);
 
     const ownerBalanceBefore = await token.balanceOf(owner.address);
 
     // Revoke lockup
-    await simpleLockup.revoke(beneficiary.address);
+    await simpleLockup.revoke();
 
-    const lockup = await simpleLockup.lockups(beneficiary.address);
+    const lockup = await simpleLockup.lockupInfo();
     expect(lockup.revoked).to.equal(true);
     expect(lockup.vestedAtRevoke).to.be.closeTo(vestedBefore, ethers.parseEther('0.1'));
 
@@ -94,10 +94,7 @@ describe('Integration: Revocation Scenarios', function () {
 
     console.log('✅ Non-revocable lockup created');
 
-    await expect(simpleLockup.revoke(beneficiary.address)).to.be.revertedWithCustomError(
-      simpleLockup,
-      'NotRevocable'
-    );
+    await expect(simpleLockup.revoke()).to.be.revertedWithCustomError(simpleLockup, 'NotRevocable');
 
     console.log('✅ Non-revocable lockup correctly protected');
   });
@@ -116,7 +113,7 @@ describe('Integration: Revocation Scenarios', function () {
     // Fast forward to 50% vesting
     await time.increase(VESTING_DURATION / 2);
 
-    const vestedBefore = await simpleLockup.vestedAmount(beneficiary.address);
+    const vestedBefore = await simpleLockup.vestedAmount();
     console.log(`\n📊 50% vested: ${ethers.formatEther(vestedBefore)} tokens`);
 
     // Beneficiary releases BEFORE owner revokes (this is acceptable)
@@ -129,13 +126,13 @@ describe('Integration: Revocation Scenarios', function () {
     );
 
     // Owner revokes AFTER beneficiary already claimed (should still succeed)
-    await expect(simpleLockup.revoke(beneficiary.address)).to.not.be.reverted;
+    await expect(simpleLockup.revoke()).to.not.be.reverted;
 
-    const lockup = await simpleLockup.lockups(beneficiary.address);
+    const lockup = await simpleLockup.lockupInfo();
     expect(lockup.revoked).to.equal(true);
 
     // Verify lockup is revoked and vesting is frozen
-    const releasableAfterRevoke = await simpleLockup.releasableAmount(beneficiary.address);
+    const releasableAfterRevoke = await simpleLockup.releasableAmount();
     // Releasable amount should be minimal (time passed during transactions)
     expect(releasableAfterRevoke).to.be.lt(ethers.parseEther('100')); // Less than 100 tokens
 
@@ -144,5 +141,57 @@ describe('Integration: Revocation Scenarios', function () {
     );
     console.log('✅ Revocation succeeded even after beneficiary claimed (intended behavior)');
     console.log("   This is NOT a front-running vulnerability - it's fair usage");
+  });
+
+  it('Should return all tokens to owner when revoked during cliff period', async function () {
+    const CLIFF_DURATION = 3 * MONTH; // 3 months cliff
+
+    await simpleLockup.createLockup(
+      beneficiary.address,
+      TOTAL_AMOUNT,
+      CLIFF_DURATION,
+      VESTING_DURATION,
+      true // Revocable
+    );
+
+    console.log('✅ Lockup with cliff created');
+    console.log(`  Cliff Duration: ${CLIFF_DURATION / (30 * 24 * 60 * 60)} months`);
+
+    const ownerBalanceBefore = await token.balanceOf(owner.address);
+
+    // Fast forward to middle of cliff period (1.5 months)
+    await time.increase(CLIFF_DURATION / 2);
+
+    // Verify no tokens vested during cliff
+    const vestedDuringCliff = await simpleLockup.vestedAmount();
+    expect(vestedDuringCliff).to.equal(0);
+    console.log('\n📊 Vested during cliff: 0 tokens (correct)');
+
+    // Revoke during cliff period
+    await simpleLockup.revoke();
+
+    const lockup = await simpleLockup.lockupInfo();
+    expect(lockup.revoked).to.equal(true);
+    expect(lockup.vestedAtRevoke).to.equal(0); // No tokens vested
+
+    console.log('\n✅ Lockup revoked during cliff');
+    console.log(`  Vested at revoke: ${ethers.formatEther(lockup.vestedAtRevoke)} tokens`);
+
+    // Owner should receive full amount back
+    const ownerBalanceAfter = await token.balanceOf(owner.address);
+    const returned = ownerBalanceAfter - ownerBalanceBefore;
+    expect(returned).to.equal(TOTAL_AMOUNT);
+
+    console.log(`\n💰 Tokens returned to owner: ${ethers.formatEther(returned)}`);
+    console.log('   Owner received 100% of tokens (correct - no vesting during cliff)');
+
+    // Beneficiary should not be able to claim anything
+    await expect(simpleLockup.connect(beneficiary).release()).to.be.revertedWithCustomError(
+      simpleLockup,
+      'NoTokensAvailable'
+    );
+
+    console.log('\n✅ Cliff period revocation completed successfully');
+    console.log('   Beneficiary cannot claim tokens (correct - nothing vested)');
   });
 });

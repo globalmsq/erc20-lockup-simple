@@ -2,32 +2,30 @@ import { ethers } from 'hardhat';
 
 /**
  * Calculate vested amounts at different time points
- * Usage: LOCKUP_ADDRESS=0x... BENEFICIARY_ADDRESS=0x... npx hardhat run scripts/calculate-vested.ts
+ * Usage: LOCKUP_ADDRESS=0x... npx hardhat run scripts/calculate-vested.ts
  */
 async function main() {
   const lockupAddress = process.env.LOCKUP_ADDRESS;
-  const beneficiaryAddress = process.env.BENEFICIARY_ADDRESS;
 
   if (!lockupAddress) {
     throw new Error('LOCKUP_ADDRESS environment variable is required');
   }
 
-  if (!beneficiaryAddress) {
-    throw new Error('BENEFICIARY_ADDRESS environment variable is required');
-  }
+  const simpleLockup = await ethers.getContractAt('SimpleLockup', lockupAddress);
+
+  // Get beneficiary from contract
+  const beneficiaryAddress = await simpleLockup.beneficiary();
 
   console.log('=== Vesting Timeline Calculator ===');
   console.log('Lockup Contract:', lockupAddress);
   console.log('Beneficiary:', beneficiaryAddress);
   console.log('');
 
-  const simpleLockup = await ethers.getContractAt('SimpleLockup', lockupAddress);
-
   // Get lockup info
-  const lockup = await simpleLockup.lockups(beneficiaryAddress);
+  const lockup = await simpleLockup.lockupInfo();
 
   if (lockup.totalAmount === 0n) {
-    console.log('❌ No lockup found for this beneficiary');
+    console.log('❌ No lockup found');
     return;
   }
 
@@ -126,9 +124,9 @@ async function main() {
   }
 
   // Current status
-  const currentVested = await simpleLockup.vestedAmount(beneficiaryAddress);
-  const currentReleasable = await simpleLockup.releasableAmount(beneficiaryAddress);
-  const currentProgress = await simpleLockup.getVestingProgress(beneficiaryAddress);
+  const currentVested = await simpleLockup.vestedAmount();
+  const currentReleasable = await simpleLockup.releasableAmount();
+  const currentProgress = await simpleLockup.getVestingProgress();
 
   console.log('📍 Current Status:');
   console.log('─'.repeat(70));

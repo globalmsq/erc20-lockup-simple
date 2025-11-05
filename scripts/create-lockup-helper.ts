@@ -58,10 +58,10 @@ async function main() {
   }
 
   // Check if lockup already exists
-  const existingLockup = await simpleLockup.lockups(beneficiary);
+  const existingLockup = await simpleLockup.lockupInfo();
   if (existingLockup.totalAmount > 0n) {
     rl.close();
-    throw new Error('Lockup already exists for this beneficiary');
+    throw new Error('Lockup already exists in this contract');
   }
 
   const amountStr = await question('Total Amount (in tokens): ');

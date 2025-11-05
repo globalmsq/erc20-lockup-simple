@@ -5,8 +5,8 @@ dotenv.config();
 
 /**
  * List lockup status for SimpleLockup contract
- * Note: SimpleLockup only supports one lockup per address, unlike the original TokenLockup
- * This script provides basic contract information
+ * Note: SimpleLockup only supports one lockup per contract (single beneficiary)
+ * This script provides basic contract information including beneficiary
  *
  * Usage: LOCKUP_ADDRESS=0x... npx hardhat run scripts/list-lockups.ts
  */
@@ -27,17 +27,17 @@ async function main() {
   // Get contract info
   const tokenAddress = await simpleLockup.token();
   const owner = await simpleLockup.owner();
+  const beneficiary = await simpleLockup.beneficiary();
 
   console.log('═══ Contract Details ═══');
   console.log('Token Address:', tokenAddress);
   console.log('Owner:', owner);
+  console.log('Beneficiary:', beneficiary);
   console.log('');
 
-  console.log('ℹ️  Note: SimpleLockup supports one lockup per address.');
-  console.log('ℹ️  To check a specific lockup, use:');
-  console.log(
-    '   LOCKUP_ADDRESS=' + lockupAddress + ' BENEFICIARY_ADDRESS=0x... pnpm check-lockup'
-  );
+  console.log('ℹ️  Note: SimpleLockup supports one lockup per contract.');
+  console.log('ℹ️  To check the lockup details, use:');
+  console.log('   LOCKUP_ADDRESS=' + lockupAddress + ' pnpm check-lockup');
 }
 
 main()

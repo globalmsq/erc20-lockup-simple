@@ -44,19 +44,16 @@ async function main() {
     return;
   }
 
-  // Get beneficiary address
-  const beneficiary = await question('Beneficiary Address to Revoke: ');
-  if (!ethers.isAddress(beneficiary)) {
-    console.log('❌ Invalid beneficiary address');
-    rl.close();
-    return;
-  }
+  // Get beneficiary from contract
+  const beneficiary = await simpleLockup.beneficiary();
+  console.log('Beneficiary:', beneficiary);
+  console.log('');
 
   // Get lockup info
-  const lockup = await simpleLockup.lockups(beneficiary);
+  const lockup = await simpleLockup.lockupInfo();
 
   if (lockup.totalAmount === 0n) {
-    console.log('❌ No lockup found for this beneficiary');
+    console.log('❌ No lockup found');
     rl.close();
     return;
   }
@@ -74,7 +71,7 @@ async function main() {
   }
 
   // Calculate vesting info
-  const vestedAmount = await simpleLockup.vestedAmount(beneficiary);
+  const vestedAmount = await simpleLockup.vestedAmount();
   const unvestedAmount = lockup.totalAmount - vestedAmount;
 
   console.log('📊 Lockup Information:');
@@ -116,7 +113,7 @@ async function main() {
   // Revoke lockup
   console.log('');
   console.log('🔨 Revoking lockup...');
-  const tx = await simpleLockup.revoke(beneficiary);
+  const tx = await simpleLockup.revoke();
 
   console.log('Transaction:', tx.hash);
   console.log('Waiting for confirmation...');
@@ -127,7 +124,7 @@ async function main() {
   console.log('');
 
   // Get updated lockup info
-  const updatedLockup = await simpleLockup.lockups(beneficiary);
+  const updatedLockup = await simpleLockup.lockupInfo();
   console.log('📊 Revoked Lockup Status:');
   console.log('─'.repeat(50));
   console.log('Revoked:', updatedLockup.revoked);

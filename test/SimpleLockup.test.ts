@@ -74,7 +74,7 @@ describe('SimpleLockup', function () {
           true
         );
 
-      const lockup = await simpleLockup.lockups(beneficiary.address);
+      const lockup = await simpleLockup.lockupInfo();
       expect(lockup.totalAmount).to.equal(TOTAL_AMOUNT);
       expect(lockup.releasedAmount).to.equal(0);
       expect(lockup.revocable).to.equal(true);
@@ -131,7 +131,7 @@ describe('SimpleLockup', function () {
         true
       );
 
-      const lockup = await simpleLockup.lockups(owner.address);
+      const lockup = await simpleLockup.lockupInfo();
       expect(lockup.totalAmount).to.equal(TOTAL_AMOUNT);
     });
 
@@ -147,12 +147,24 @@ describe('SimpleLockup', function () {
       ).to.be.revertedWithCustomError(simpleLockup, 'InvalidDuration');
     });
 
-    it('Should revert when cliff is longer than vesting', async function () {
+    it('Should revert when cliff is longer than or equal to vesting', async function () {
+      // Test cliff > vesting
       await expect(
         simpleLockup.createLockup(
           beneficiary.address,
           TOTAL_AMOUNT,
           VESTING_DURATION + 1,
+          VESTING_DURATION,
+          true
+        )
+      ).to.be.revertedWithCustomError(simpleLockup, 'InvalidDuration');
+
+      // Test cliff == vesting (new validation)
+      await expect(
+        simpleLockup.createLockup(
+          beneficiary.address,
+          TOTAL_AMOUNT,
+          VESTING_DURATION,
           VESTING_DURATION,
           true
         )
@@ -202,46 +214,46 @@ describe('SimpleLockup', function () {
     });
 
     it('Should return 0 vested amount during cliff period', async function () {
-      const vested = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested = await simpleLockup.vestedAmount();
       expect(vested).to.equal(0);
     });
 
     it('Should return correct vested amount after cliff', async function () {
       await time.increase(CLIFF_DURATION + 1);
-      const vested = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested = await simpleLockup.vestedAmount();
       expect(vested).to.be.gt(0);
     });
 
     it('Should return total amount after vesting completion', async function () {
       await time.increase(VESTING_DURATION + 1);
-      const vested = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested = await simpleLockup.vestedAmount();
       expect(vested).to.equal(TOTAL_AMOUNT);
     });
 
     it('Should calculate vesting progress correctly', async function () {
-      const progress1 = await simpleLockup.getVestingProgress(beneficiary.address);
+      const progress1 = await simpleLockup.getVestingProgress();
       expect(progress1).to.equal(0); // Before cliff
 
       await time.increase(CLIFF_DURATION);
-      const progress2 = await simpleLockup.getVestingProgress(beneficiary.address);
+      const progress2 = await simpleLockup.getVestingProgress();
       expect(progress2).to.be.gt(0);
       expect(progress2).to.be.lt(100);
 
       await time.increase(VESTING_DURATION);
-      const progress3 = await simpleLockup.getVestingProgress(beneficiary.address);
+      const progress3 = await simpleLockup.getVestingProgress();
       expect(progress3).to.equal(100);
     });
 
     it('Should calculate remaining vesting time correctly', async function () {
-      const remaining1 = await simpleLockup.getRemainingVestingTime(beneficiary.address);
+      const remaining1 = await simpleLockup.getRemainingVestingTime();
       expect(remaining1).to.equal(VESTING_DURATION);
 
       await time.increase(VESTING_DURATION / 2);
-      const remaining2 = await simpleLockup.getRemainingVestingTime(beneficiary.address);
+      const remaining2 = await simpleLockup.getRemainingVestingTime();
       expect(remaining2).to.be.closeTo(VESTING_DURATION / 2, 10);
 
       await time.increase(VESTING_DURATION);
-      const remaining3 = await simpleLockup.getRemainingVestingTime(beneficiary.address);
+      const remaining3 = await simpleLockup.getRemainingVestingTime();
       expect(remaining3).to.equal(0);
     });
   });
@@ -267,7 +279,7 @@ describe('SimpleLockup', function () {
     it('Should release tokens after cliff', async function () {
       await time.increase(CLIFF_DURATION + 1);
 
-      const releasable = await simpleLockup.releasableAmount(beneficiary.address);
+      const releasable = await simpleLockup.releasableAmount();
       expect(releasable).to.be.gt(0);
 
       await simpleLockup.connect(beneficiary).release();
@@ -284,14 +296,14 @@ describe('SimpleLockup', function () {
       const beneficiaryBalance = await token.balanceOf(beneficiary.address);
       expect(beneficiaryBalance).to.equal(TOTAL_AMOUNT);
 
-      const lockup = await simpleLockup.lockups(beneficiary.address);
+      const lockup = await simpleLockup.lockupInfo();
       expect(lockup.releasedAmount).to.equal(TOTAL_AMOUNT);
     });
 
-    it('Should revert when no lockup exists', async function () {
+    it('Should revert when called by non-beneficiary', async function () {
       await expect(simpleLockup.connect(otherAccount).release()).to.be.revertedWithCustomError(
         simpleLockup,
-        'NoLockupFound'
+        'NotBeneficiary'
       );
     });
   });
@@ -310,12 +322,12 @@ describe('SimpleLockup', function () {
     it('Should revoke lockup and return unvested tokens', async function () {
       await time.increase(VESTING_DURATION / 2);
 
-      const vestedBefore = await simpleLockup.vestedAmount(beneficiary.address);
+      const vestedBefore = await simpleLockup.vestedAmount();
       const unvested = TOTAL_AMOUNT - vestedBefore;
 
-      await simpleLockup.revoke(beneficiary.address);
+      await simpleLockup.revoke();
 
-      const lockup = await simpleLockup.lockups(beneficiary.address);
+      const lockup = await simpleLockup.lockupInfo();
       expect(lockup.revoked).to.equal(true);
       expect(lockup.vestedAtRevoke).to.be.closeTo(vestedBefore, ethers.parseEther('0.1')); // Allow rounding tolerance
 
@@ -326,8 +338,8 @@ describe('SimpleLockup', function () {
     it('Should allow beneficiary to claim vested tokens after revocation', async function () {
       await time.increase(VESTING_DURATION / 2);
 
-      const vested = await simpleLockup.vestedAmount(beneficiary.address);
-      await simpleLockup.revoke(beneficiary.address);
+      const vested = await simpleLockup.vestedAmount();
+      await simpleLockup.revoke();
 
       await simpleLockup.connect(beneficiary).release();
 
@@ -335,35 +347,49 @@ describe('SimpleLockup', function () {
       expect(beneficiaryBalance).to.be.closeTo(vested, ethers.parseEther('0.1')); // Allow rounding tolerance
     });
 
-    it('Should revert when revoking non-revocable lockup', async function () {
-      await token.approve(await simpleLockup.getAddress(), TOTAL_AMOUNT);
-      await simpleLockup.createLockup(
-        otherAccount.address,
-        TOTAL_AMOUNT,
-        CLIFF_DURATION,
-        VESTING_DURATION,
-        false
-      );
-
-      await expect(simpleLockup.revoke(otherAccount.address)).to.be.revertedWithCustomError(
-        simpleLockup,
-        'NotRevocable'
-      );
-    });
-
     it('Should revert when revoking already revoked lockup', async function () {
-      await simpleLockup.revoke(beneficiary.address);
+      await simpleLockup.revoke();
 
-      await expect(simpleLockup.revoke(beneficiary.address)).to.be.revertedWithCustomError(
+      await expect(simpleLockup.revoke()).to.be.revertedWithCustomError(
         simpleLockup,
         'AlreadyRevoked'
       );
     });
 
+    it('Should return all tokens to owner when revoked before cliff', async function () {
+      // Create lockup with 30-day cliff
+      const ownerBalanceBefore = await token.balanceOf(owner.address);
+
+      // Fast forward to middle of cliff period (15 days)
+      await time.increase(CLIFF_DURATION / 2);
+
+      // Verify no tokens vested during cliff
+      const vestedDuringCliff = await simpleLockup.vestedAmount();
+      expect(vestedDuringCliff).to.equal(0);
+
+      // Revoke during cliff period
+      await simpleLockup.revoke();
+
+      const lockup = await simpleLockup.lockupInfo();
+      expect(lockup.revoked).to.equal(true);
+      expect(lockup.vestedAtRevoke).to.equal(0); // No tokens vested
+
+      // Owner should receive full amount back
+      const ownerBalanceAfter = await token.balanceOf(owner.address);
+      expect(ownerBalanceAfter).to.equal(ownerBalanceBefore + TOTAL_AMOUNT);
+
+      // Beneficiary should not be able to claim anything
+      await expect(simpleLockup.connect(beneficiary).release()).to.be.revertedWithCustomError(
+        simpleLockup,
+        'NoTokensAvailable'
+      );
+    });
+
     it('Should revert when called by non-owner', async function () {
-      await expect(
-        simpleLockup.connect(otherAccount).revoke(beneficiary.address)
-      ).to.be.revertedWithCustomError(simpleLockup, 'OwnableUnauthorizedAccount');
+      await expect(simpleLockup.connect(otherAccount).revoke()).to.be.revertedWithCustomError(
+        simpleLockup,
+        'OwnableUnauthorizedAccount'
+      );
     });
   });
 
@@ -383,7 +409,7 @@ describe('SimpleLockup', function () {
 
       // Day 1
       await time.increase(24 * 60 * 60);
-      const vested1 = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested1 = await simpleLockup.vestedAmount();
       expect(vested1).to.be.gt(0); // Should have some vested amount
 
       await simpleLockup.connect(beneficiary).release();
@@ -392,7 +418,7 @@ describe('SimpleLockup', function () {
 
       // Day 2
       await time.increase(24 * 60 * 60);
-      const vested2 = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested2 = await simpleLockup.vestedAmount();
       await simpleLockup.connect(beneficiary).release();
       const balance2 = await token.balanceOf(beneficiary.address);
 
@@ -410,9 +436,9 @@ describe('SimpleLockup', function () {
 
       // 5 years later (50% vesting)
       await time.increase(5 * 365 * 24 * 60 * 60);
-      await simpleLockup.revoke(beneficiary.address);
+      await simpleLockup.revoke();
 
-      const lockup = await simpleLockup.lockups(beneficiary.address);
+      const lockup = await simpleLockup.lockupInfo();
       const expected = LARGE_AMOUNT / 2n; // 50% should be vested
 
       // Verify acceptable precision (< 0.001% error for 50M tokens)

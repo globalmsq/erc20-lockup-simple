@@ -54,12 +54,12 @@ describe('Integration: Full Vesting Lifecycle', function () {
       console.log(`  Total Amount: ${ethers.formatEther(TOTAL_AMOUNT)} tokens`);
 
       // Verify initial state
-      expect(await simpleLockup.vestedAmount(beneficiary.address)).to.equal(0);
-      expect(await simpleLockup.releasableAmount(beneficiary.address)).to.equal(0);
+      expect(await simpleLockup.vestedAmount()).to.equal(0);
+      expect(await simpleLockup.releasableAmount()).to.equal(0);
 
       // Test at 25% vested
       await time.increase(25 * MONTH);
-      const vested25 = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested25 = await simpleLockup.vestedAmount();
       const expected25 = (TOTAL_AMOUNT * 25n) / 100n;
       expect(vested25).to.be.closeTo(expected25, ethers.parseEther('2000'));
 
@@ -75,7 +75,7 @@ describe('Integration: Full Vesting Lifecycle', function () {
 
       // Test at 50% vested
       await time.increase(25 * MONTH);
-      const vested50 = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested50 = await simpleLockup.vestedAmount();
       const expected50 = (TOTAL_AMOUNT * 50n) / 100n;
       expect(vested50).to.be.closeTo(expected50, ethers.parseEther('2000'));
 
@@ -84,7 +84,7 @@ describe('Integration: Full Vesting Lifecycle', function () {
 
       // Test at 75% vested
       await time.increase(25 * MONTH);
-      const vested75 = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested75 = await simpleLockup.vestedAmount();
       const expected75 = (TOTAL_AMOUNT * 75n) / 100n;
       expect(vested75).to.be.closeTo(expected75, ethers.parseEther('2000'));
 
@@ -93,7 +93,7 @@ describe('Integration: Full Vesting Lifecycle', function () {
 
       // Test at 100% vested
       await time.increase(25 * MONTH);
-      const vested100 = await simpleLockup.vestedAmount(beneficiary.address);
+      const vested100 = await simpleLockup.vestedAmount();
       expect(vested100).to.equal(TOTAL_AMOUNT);
 
       console.log(`\n📊 100% Vested:`);

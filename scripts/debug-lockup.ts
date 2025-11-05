@@ -2,23 +2,17 @@ import { ethers } from 'hardhat';
 
 /**
  * Debug helper for troubleshooting lockup creation issues
- * Usage: LOCKUP_ADDRESS=0x... BENEFICIARY_ADDRESS=0x... npx hardhat run scripts/debug-lockup.ts
+ * Usage: LOCKUP_ADDRESS=0x... npx hardhat run scripts/debug-lockup.ts
  */
 async function main() {
   const lockupAddress = process.env.LOCKUP_ADDRESS;
-  const beneficiaryAddress = process.env.BENEFICIARY_ADDRESS;
 
   if (!lockupAddress) {
     throw new Error('LOCKUP_ADDRESS environment variable is required');
   }
 
-  if (!beneficiaryAddress) {
-    throw new Error('BENEFICIARY_ADDRESS environment variable is required');
-  }
-
-  console.log('🔍 Debugging Lockup Creation');
+  console.log('🔍 Debugging Lockup');
   console.log('SimpleLockup Address:', lockupAddress);
-  console.log('Beneficiary Address:', beneficiaryAddress);
   console.log('');
 
   const [deployer] = await ethers.getSigners();
@@ -27,6 +21,11 @@ async function main() {
   const simpleLockup = await ethers.getContractAt('SimpleLockup', lockupAddress);
   const tokenAddress = await simpleLockup.token();
   const token = await ethers.getContractAt('IERC20', tokenAddress);
+
+  // Get beneficiary from contract
+  const beneficiaryAddress = await simpleLockup.beneficiary();
+  console.log('Beneficiary Address:', beneficiaryAddress);
+  console.log('');
 
   console.log('=== Contract Information ===');
   console.log('Token Address:', tokenAddress);
@@ -50,7 +49,7 @@ async function main() {
   console.log('');
 
   console.log('=== Existing Lockup Check ===');
-  const existingLockup = await simpleLockup.lockups(beneficiaryAddress);
+  const existingLockup = await simpleLockup.lockupInfo();
   console.log('Total Amount:', ethers.formatEther(existingLockup.totalAmount));
   console.log('Released Amount:', ethers.formatEther(existingLockup.releasedAmount));
   console.log('Lockup Exists?:', existingLockup.totalAmount > 0n);

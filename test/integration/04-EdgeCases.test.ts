@@ -55,12 +55,12 @@ describe('Integration: Edge Cases', function () {
 
     // During cliff period - no vesting
     await time.increase(3 * MONTH);
-    expect(await simpleLockup.vestedAmount(beneficiary.address)).to.equal(0);
+    expect(await simpleLockup.vestedAmount()).to.equal(0);
     console.log('  ✅ No vesting during cliff period');
 
     // After cliff - vesting starts
     await time.increase(4 * MONTH); // Total 7 months (past cliff)
-    const vested = await simpleLockup.vestedAmount(beneficiary.address);
+    const vested = await simpleLockup.vestedAmount();
     expect(vested).to.be.gt(0);
     console.log(`  ✅ Vesting after cliff: ${ethers.formatEther(vested)} tokens`);
   });

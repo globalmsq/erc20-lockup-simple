@@ -36,7 +36,7 @@ async function main() {
   const simpleLockup = await ethers.getContractAt('SimpleLockup', lockupAddress);
 
   // Get lockup info
-  const lockup = await simpleLockup.lockups(beneficiary.address);
+  const lockup = await simpleLockup.lockupInfo();
 
   if (lockup.totalAmount === 0n) {
     console.log('❌ No lockup found for your address');
@@ -45,10 +45,10 @@ async function main() {
   }
 
   // Get vesting info
-  const vestedAmount = await simpleLockup.vestedAmount(beneficiary.address);
-  const releasableAmount = await simpleLockup.releasableAmount(beneficiary.address);
-  const vestingProgress = await simpleLockup.getVestingProgress(beneficiary.address);
-  const remainingTime = await simpleLockup.getRemainingVestingTime(beneficiary.address);
+  const vestedAmount = await simpleLockup.vestedAmount();
+  const releasableAmount = await simpleLockup.releasableAmount();
+  const vestingProgress = await simpleLockup.getVestingProgress();
+  const remainingTime = await simpleLockup.getRemainingVestingTime();
 
   console.log('📊 Your Lockup Information:');
   console.log('─'.repeat(50));
@@ -117,7 +117,7 @@ async function main() {
   console.log('');
 
   // Get updated lockup info
-  const updatedLockup = await simpleLockup.lockups(beneficiary.address);
+  const updatedLockup = await simpleLockup.lockupInfo();
   console.log('📊 Updated Lockup Status:');
   console.log('─'.repeat(50));
   console.log('Total Released:', ethers.formatEther(updatedLockup.releasedAmount), 'tokens');

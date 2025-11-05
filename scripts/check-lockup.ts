@@ -4,42 +4,42 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 /**
- * Check lockup information for a beneficiary
- * Usage: LOCKUP_ADDRESS=0x... BENEFICIARY_ADDRESS=0x... npx hardhat run scripts/check-lockup.ts
+ * Check lockup information
+ * Usage: LOCKUP_ADDRESS=0x... npx hardhat run scripts/check-lockup.ts
  */
 async function main() {
   const lockupAddress = process.env.LOCKUP_ADDRESS;
-  const beneficiaryAddress = process.env.BENEFICIARY_ADDRESS;
 
   if (!lockupAddress) {
     throw new Error('LOCKUP_ADDRESS environment variable is required');
   }
 
-  if (!beneficiaryAddress) {
-    throw new Error('BENEFICIARY_ADDRESS environment variable is required');
-  }
-
   console.log('🔍 Checking Lockup Information');
   console.log('SimpleLockup Address:', lockupAddress);
-  console.log('Beneficiary Address:', beneficiaryAddress);
   console.log('');
 
   const SimpleLockup = await ethers.getContractFactory('SimpleLockup');
   const simpleLockup = SimpleLockup.attach(lockupAddress);
 
+  // Get beneficiary from contract
+  const beneficiaryAddress = await simpleLockup.beneficiary();
+
+  console.log('Beneficiary Address:', beneficiaryAddress);
+  console.log('');
+
   // Get lockup info
-  const lockup = await simpleLockup.lockups(beneficiaryAddress);
+  const lockup = await simpleLockup.lockupInfo();
 
   if (lockup.totalAmount === 0n) {
-    console.log('❌ No lockup found for this address');
+    console.log('❌ No lockup found');
     return;
   }
 
   // Get additional info
-  const vestedAmount = await simpleLockup.vestedAmount(beneficiaryAddress);
-  const releasableAmount = await simpleLockup.releasableAmount(beneficiaryAddress);
-  const vestingProgress = await simpleLockup.getVestingProgress(beneficiaryAddress);
-  const remainingTime = await simpleLockup.getRemainingVestingTime(beneficiaryAddress);
+  const vestedAmount = await simpleLockup.vestedAmount();
+  const releasableAmount = await simpleLockup.releasableAmount();
+  const vestingProgress = await simpleLockup.getVestingProgress();
+  const remainingTime = await simpleLockup.getRemainingVestingTime();
 
   // Calculate timestamps
   const cliffEnd = lockup.startTime + lockup.cliffDuration;
