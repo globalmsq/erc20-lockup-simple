@@ -119,11 +119,18 @@ cp .env.example .env
 Required variables:
 
 ```env
+# Deployment (set these before deploying)
 PRIVATE_KEY=your_private_key_here
 TOKEN_ADDRESS=sut_token_address
+
+# Network RPC URLs
 POLYGON_RPC_URL=https://polygon-rpc.com
 AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+
+# Optional (for contract verification)
 ETHERSCAN_API_KEY=your_etherscan_api_key
+
+# Note: LOCKUP_ADDRESS is set via export when running helper scripts (after deployment)
 ```
 
 ### Testing
@@ -144,9 +151,9 @@ pnpm integration-tests
 ### Testnet (Amoy)
 
 ```bash
-# Set environment variables
-export PRIVATE_KEY=0x...
-export TOKEN_ADDRESS=0xE4C687167705Abf55d709395f92e254bdF5825a2  # Amoy testnet SUT
+# Configure .env file with your values:
+# PRIVATE_KEY=0x...
+# TOKEN_ADDRESS=0xE4C687167705Abf55d709395f92e254bdF5825a2  # Amoy testnet SUT
 
 # Deploy
 pnpm deploy:testnet
@@ -158,9 +165,9 @@ pnpm verify:testnet
 ### Mainnet (Polygon)
 
 ```bash
-# Set environment variables
-export PRIVATE_KEY=0x...
-export TOKEN_ADDRESS=0x98965474EcBeC2F532F1f780ee37b0b05F77Ca55  # Polygon mainnet SUT
+# Configure .env file with your values:
+# PRIVATE_KEY=0x...
+# TOKEN_ADDRESS=0x98965474EcBeC2F532F1f780ee37b0b05F77Ca55  # Polygon mainnet SUT
 
 # Deploy
 pnpm deploy:mainnet
@@ -171,10 +178,15 @@ pnpm verify:mainnet
 
 ## Usage Examples
 
-> **Note**: All helper scripts require `--network` parameter to specify which network your contract is deployed on:
+> **Note**: All helper scripts require:
 >
-> - `--network amoy` for Polygon testnet
-> - `--network polygon` for Polygon mainnet
+> 1. `--network` parameter to specify which network your contract is deployed on:
+>    - `--network amoy` for Polygon testnet
+>    - `--network polygon` for Polygon mainnet
+> 2. `LOCKUP_ADDRESS` environment variable (obtained after deployment):
+>    ```bash
+>    export LOCKUP_ADDRESS=0x...  # Replace with your deployed contract address
+>    ```
 
 ### Create a Lockup (Interactive)
 
