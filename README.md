@@ -411,14 +411,12 @@ Deploy SimpleLockup contract to Polygon mainnet or Amoy testnet.
 **Usage:**
 
 ```bash
+# Configure .env with your values (PRIVATE_KEY, TOKEN_ADDRESS)
+
 # Testnet deployment
-export PRIVATE_KEY=0x...
-export TOKEN_ADDRESS=0xE4C687167705Abf55d709395f92e254bdF5825a2
 pnpm deploy:testnet
 
 # Mainnet deployment
-export PRIVATE_KEY=0x...
-export TOKEN_ADDRESS=0x98965474EcBeC2F532F1f780ee37b0b05F77Ca55
 pnpm deploy:mainnet
 ```
 
@@ -920,15 +918,13 @@ cp .env.example .env
 pnpm test
 pnpm integration-tests
 
-# 4. Deploy to testnet
-export PRIVATE_KEY=0x...
-export TOKEN_ADDRESS=0xE4C687167705Abf55d709395f92e254bdF5825a2
+# 4. Deploy to testnet (.env file is automatically loaded)
 pnpm deploy:testnet
 
 # 5. Verify contract
 pnpm verify:testnet
 
-# 6. Save LOCKUP_ADDRESS from deployment output
+# 6. Save LOCKUP_ADDRESS from deployment output for helper scripts
 export LOCKUP_ADDRESS=0x...
 ```
 
