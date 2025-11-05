@@ -25,7 +25,9 @@
     "calculate-vested": "hardhat run scripts/calculate-vested.ts",
     "create-lockup": "hardhat run scripts/create-lockup-helper.ts",
     "debug-lockup": "hardhat run scripts/debug-lockup.ts",
-    "list-lockups": "hardhat run scripts/list-lockups.ts"
+    "list-lockups": "hardhat run scripts/list-lockups.ts",
+    "release-helper": "hardhat run scripts/release-helper.ts",
+    "revoke-helper": "hardhat run scripts/revoke-helper.ts"
   },
   "keywords": [
     "hardhat",
