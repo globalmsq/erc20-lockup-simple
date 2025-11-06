@@ -192,37 +192,45 @@ pnpm verify:mainnet
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-npx hardhat run scripts/create-lockup-helper.ts --network amoy
+pnpm create-lockup -- --network amoy
 # Or for mainnet:
-# npx hardhat run scripts/create-lockup-helper.ts --network polygon
+# pnpm create-lockup -- --network polygon
 ```
 
 ### Check Lockup Status
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-npx hardhat run scripts/check-lockup.ts --network amoy
+pnpm check-lockup -- --network amoy
+# Or for mainnet:
+# pnpm check-lockup -- --network polygon
 ```
 
 ### Release Vested Tokens
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-npx hardhat run scripts/release-helper.ts --network amoy
+pnpm release-helper -- --network amoy
+# Or for mainnet:
+# pnpm release-helper -- --network polygon
 ```
 
 ### Revoke Lockup (Owner)
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-npx hardhat run scripts/revoke-helper.ts --network amoy
+pnpm revoke-helper -- --network amoy
+# Or for mainnet:
+# pnpm revoke-helper -- --network polygon
 ```
 
 ### Calculate Vesting Timeline
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-npx hardhat run scripts/calculate-vested.ts --network amoy
+pnpm calculate-vested -- --network amoy
+# Or for mainnet:
+# pnpm calculate-vested -- --network polygon
 ```
 
 ## Smart Contract Details
@@ -375,15 +383,15 @@ This will:
 | Production Deploy    | `pnpm deploy:mainnet` / `pnpm deploy:testnet` | Deploy to Polygon networks                  |
 | Test Deploy          | `pnpm deploy:local`                           | Deploy with MockERC20 for testing           |
 | **Management**       |                                               |                                             |
-| Create Lockup        | `pnpm create-lockup`                          | Interactive lockup creation with validation |
-| Release Tokens       | `pnpm release-helper`                         | Beneficiary claims vested tokens            |
-| Revoke Lockup        | `pnpm revoke-helper`                          | Owner revokes unvested tokens               |
+| Create Lockup        | `pnpm create-lockup -- --network [amoy\|polygon]` | Interactive lockup creation with validation |
+| Release Tokens       | `pnpm release-helper -- --network [amoy\|polygon]` | Beneficiary claims vested tokens            |
+| Revoke Lockup        | `pnpm revoke-helper -- --network [amoy\|polygon]` | Owner revokes unvested tokens               |
 | **Query & Analysis** |                                               |                                             |
-| Check Status         | `pnpm check-lockup`                           | View comprehensive lockup information       |
-| Calculate Timeline   | `pnpm calculate-vested`                       | Calculate vesting schedule and milestones   |
-| List Contract Info   | `pnpm list-lockups`                           | Display contract and token details          |
+| Check Status         | `pnpm check-lockup -- --network [amoy\|polygon]` | View comprehensive lockup information       |
+| Calculate Timeline   | `pnpm calculate-vested -- --network [amoy\|polygon]` | Calculate vesting schedule and milestones   |
+| List Contract Info   | `pnpm list-lockups -- --network [amoy\|polygon]` | Display contract and token details          |
 | **Debugging**        |                                               |                                             |
-| Debug Issues         | `pnpm debug-lockup`                           | Diagnose lockup creation problems           |
+| Debug Issues         | `pnpm debug-lockup -- --network [amoy\|polygon]` | Diagnose lockup creation problems           |
 | **Testing**          |                                               |                                             |
 | Unit Tests           | `pnpm test`                                   | Run Hardhat tests                           |
 | Integration Tests    | `pnpm integration-tests`                      | Full Docker test suite                      |
@@ -460,7 +468,9 @@ Interactive CLI tool for creating lockups with comprehensive validation.
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-pnpm create-lockup
+pnpm create-lockup -- --network amoy
+# Or for mainnet:
+# pnpm create-lockup -- --network polygon
 ```
 
 **Interactive Prompts:**
@@ -530,7 +540,9 @@ Interactive tool for beneficiaries to claim vested tokens.
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-pnpm release-helper
+pnpm release-helper -- --network amoy
+# Or for mainnet:
+# pnpm release-helper -- --network polygon
 ```
 
 **Behavior:**
@@ -584,7 +596,9 @@ Interactive tool for owner to revoke lockups and reclaim unvested tokens.
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-pnpm revoke-helper
+pnpm revoke-helper -- --network amoy
+# Or for mainnet:
+# pnpm revoke-helper -- --network polygon
 ```
 
 **Security Features:**
@@ -649,7 +663,9 @@ Query comprehensive lockup information.
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-pnpm check-lockup
+pnpm check-lockup -- --network amoy
+# Or for mainnet:
+# pnpm check-lockup -- --network polygon
 ```
 
 **Output:**
@@ -697,7 +713,9 @@ Calculate and display vested amounts at different time points.
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-pnpm calculate-vested
+pnpm calculate-vested -- --network amoy
+# Or for mainnet:
+# pnpm calculate-vested -- --network polygon
 ```
 
 **Output:**
@@ -753,7 +771,9 @@ Display SimpleLockup contract information and usage instructions.
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-pnpm list-lockups
+pnpm list-lockups -- --network amoy
+# Or for mainnet:
+# pnpm list-lockups -- --network polygon
 ```
 
 **Output:**
@@ -779,7 +799,9 @@ Diagnostic tool for troubleshooting lockup issues.
 
 ```bash
 export LOCKUP_ADDRESS=0x...
-pnpm debug-lockup
+pnpm debug-lockup -- --network amoy
+# Or for mainnet:
+# pnpm debug-lockup -- --network polygon
 ```
 
 **Diagnostics Performed:**
@@ -937,13 +959,13 @@ export LOCKUP_ADDRESS=0x...
 export LOCKUP_ADDRESS=0x...
 
 # Use interactive creation tool
-pnpm create-lockup
+pnpm create-lockup -- --network amoy
 
 # Verify lockup was created
-pnpm check-lockup
+pnpm check-lockup -- --network amoy
 
 # Calculate vesting timeline
-pnpm calculate-vested
+pnpm calculate-vested -- --network amoy
 ```
 
 ---
@@ -955,10 +977,10 @@ pnpm calculate-vested
 export LOCKUP_ADDRESS=0x...
 
 # Check your lockup status
-pnpm check-lockup
+pnpm check-lockup -- --network amoy
 
 # If tokens are available, release them
-pnpm release-helper
+pnpm release-helper -- --network amoy
 ```
 
 ---
@@ -970,14 +992,14 @@ pnpm release-helper
 export LOCKUP_ADDRESS=0x...
 
 # Check current status
-pnpm check-lockup
+pnpm check-lockup -- --network amoy
 
 # Revoke lockup (owner only)
-pnpm revoke-helper
+pnpm revoke-helper -- --network amoy
 # Follow prompts and confirm twice
 
 # Verify revocation
-pnpm check-lockup
+pnpm check-lockup -- --network amoy
 ```
 
 ---
@@ -989,7 +1011,7 @@ pnpm check-lockup
 export LOCKUP_ADDRESS=0x...
 
 # Run diagnostic tool
-pnpm debug-lockup
+pnpm debug-lockup -- --network amoy
 
 # Follow recommendations:
 # - Approve tokens if needed
