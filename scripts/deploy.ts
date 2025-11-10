@@ -166,11 +166,62 @@ async function main() {
   // Validate token address before deployment
   await validateTokenAddress(tokenAddress);
 
+  // Network-specific token validation (warning only)
+  const network = await ethers.provider.getNetwork();
+  const chainId = network.chainId;
+
+  if (chainId === 137n || chainId === 80002n) {
+    const expectedTokens: { [key: string]: string } = {
+      '137': '0x98965474EcBeC2F532F1f780ee37b0b05F77Ca55', // Polygon Mainnet SUT
+      '80002': '0xE4C687167705Abf55d709395f92e254bdF5825a2', // Amoy Testnet SUT
+    };
+
+    const expectedToken = expectedTokens[chainId.toString()];
+    if (
+      expectedToken &&
+      tokenAddress.toLowerCase() !== expectedToken.toLowerCase() &&
+      process.env.TOKEN_ADDRESS
+    ) {
+      console.log('\n⚠️  WARNING: Token address does not match expected SUT token');
+      console.log(`  Network: ${network.name} (chainId: ${chainId})`);
+      console.log(`  Expected SUT: ${expectedToken}`);
+      console.log(`  Provided: ${tokenAddress}`);
+      console.log('\n  If you are using a different ERC20 token, you can ignore this warning.');
+      console.log('  Continuing with deployment...\n');
+    }
+  }
+
   // Deploy SimpleLockup
   console.log('\nDeploying SimpleLockup...');
+
+  console.log('📝 Step 1: Getting contract factory...');
   const SimpleLockup = await ethers.getContractFactory('SimpleLockup');
-  const simpleLockup = await SimpleLockup.deploy(tokenAddress);
+  console.log('✅ Contract factory obtained');
+
+  console.log('📝 Step 2: Deploying contract (this may take a while)...');
+  console.log('   - Estimating gas...');
+
+  // Estimate gas and add 100% buffer
+  const deployTx = await SimpleLockup.getDeployTransaction(tokenAddress);
+  const gasEstimate = await ethers.provider.estimateGas(deployTx);
+  const gasWithBuffer = gasEstimate * 2n; // Add 100% buffer (2x estimated)
+
+  console.log('   ✅ Gas estimated:');
+  console.log('      - Estimated gas:', gasEstimate.toString());
+  console.log('      - With 100% buffer (2x):', gasWithBuffer.toString());
+
+  // Deploy with 100% gas buffer (2x estimated)
+  const simpleLockup = await SimpleLockup.deploy(tokenAddress, {
+    gasLimit: gasWithBuffer,
+  });
+  console.log('✅ Contract deployed, transaction sent');
+  console.log('   - Transaction hash:', simpleLockup.deploymentTransaction()?.hash);
+  console.log('   - View on Polygonscan: https://polygonscan.com/tx/' + simpleLockup.deploymentTransaction()?.hash);
+
+  console.log('📝 Step 3: Waiting for deployment confirmation...');
+  console.log('   - This waits for the transaction to be mined');
   await simpleLockup.waitForDeployment();
+  console.log('✅ Deployment confirmed!');
 
   const lockupAddress = await simpleLockup.getAddress();
   console.log('SimpleLockup deployed to:', lockupAddress);
@@ -197,32 +248,11 @@ async function main() {
     throw new Error('Deployment validation failed!');
   }
 
-  // Network-specific validation
-  const network = await ethers.provider.getNetwork();
-  const chainId = network.chainId;
-
-  if (chainId === 137n || chainId === 80002n) {
-    const expectedTokens: { [key: string]: string } = {
-      '137': '0x98965474EcBeC2F532F1f780ee37b0b05F77Ca55', // Polygon Mainnet SUT
-      '80002': '0xE4C687167705Abf55d709395f92e254bdF5825a2', // Amoy Testnet SUT
-    };
-
-    const expectedToken = expectedTokens[chainId.toString()];
-    if (
-      expectedToken &&
-      tokenAddress.toLowerCase() !== expectedToken.toLowerCase() &&
-      process.env.TOKEN_ADDRESS
-    ) {
-      console.log('\n⚠️  Warning: Token address does not match expected ERC20 token address');
-      console.log('  Expected:', expectedToken);
-      console.log('  Actual:', tokenAddress);
-    }
-  }
-
   // Save deployment info
+  const networkInfo = await ethers.provider.getNetwork();
   const deploymentInfo = {
-    network: network.name,
-    chainId: chainId.toString(),
+    network: networkInfo.name,
+    chainId: networkInfo.chainId.toString(),
     deployer: deployer.address,
     tokenAddress: tokenAddress,
     simpleLockupAddress: lockupAddress,

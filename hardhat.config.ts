@@ -26,13 +26,15 @@ const config: HardhatUserConfig = {
       url: process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com',
       chainId: 137,
       accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: 'auto',
+      timeout: 120000, // 2 minutes timeout
+      gasPrice: process.env.GAS_PRICE ? parseInt(process.env.GAS_PRICE) : 'auto',
     },
     amoy: {
       url: process.env.AMOY_RPC_URL || 'https://rpc-amoy.polygon.technology',
       chainId: 80002,
       accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: 'auto',
+      timeout: 120000, // 2 minutes timeout
+      gasPrice: process.env.GAS_PRICE ? parseInt(process.env.GAS_PRICE) : 'auto',
     },
   },
   etherscan: {
